@@ -405,19 +405,19 @@ SELECT COUNT(*), COUNT(DISTINCT ASIN) FROM amazon_sale_report;
 ```
 
 
-```
-SELECT min(length(OrderID)),max((length(OrderId))) FROM amazon_sale_report ;
-```
+
 
 
 ### 2) 쿼리 검색 확인
 
-- 고객의 입장에서 주로 할 것 같은 검색은 배송 상태일 것
-  - 주문, 일자 ,상태, 배송 상태를 확인  
+* 참조: 고객의 입장에서 주로 할 것 같은 검색은 배송 상태로, 주문, 일자 ,상태, 배송 상태를 추출하는 쿼리로 테스트 
 
 
-- 비교 사항 1
-  - 데이터 타입을 char 또는 varchar로 바꿔서 확인
+#### 비교 사항 1: 데이터 타입(char,text)이 쿼리에 미치는 영향 확인
+```
+SELECT min(length(OrderID)),max((length(OrderId))) FROM amazon_sale_report ;
+```
+  - 위와 같은 방식으로 확인하여 데이터 타입이 TEXT인 칼럼들을 char 또는 varchar로 변경한 테이블 작성 
 
 ```
 CREATE TABLE amazon_sale_report2 
@@ -440,45 +440,94 @@ CREATE TABLE amazon_sale_report2
 
 INSERT INTO amazon_sale_report2 SELECT * FROM amazon_sale_report ;
 
-EXPLAIN ANALYZE SELECT OrderId, date,Status, CourierStatus FROM amazon_sale_report2;
-EXPLAIN ANALYZE SELECT OrderId, date,Status, CourierStatus FROM amazon_sale_report;
+```
+
+ - 쿼리 확인해보기 
+```
+EXPLAIN ANALYZE SELECT OrderId, date,Status, CourierStatus FROM amazon_sale_report2 WHERE orderID='408-7955685-3083534' ;
+EXPLAIN ANALYZE SELECT OrderId, date,Status, CourierStatus FROM amazon_sale_report WHERE orderID='408-7955685-3083534';
+```
+
+ - 출력값
+```
+# amazon_sale_report2의 경우
+"Seq Scan on amazon_sale_report2  (cost=0.00..3871.19 rows=1 width=45) (actual time=0.099..34.556 rows=1 loops=1)"
+"  Filter: (orderid = '408-7955685-3083534'::bpchar)"
+"  Rows Removed by Filter: 128974"
+"Planning Time: 0.517 ms"
+"Execution Time: 34.590 ms"
+
+# amazon_sale_report의 경우
+"Seq Scan on amazon_sale_report  (cost=0.00..3871.19 rows=1 width=45) (actual time=0.031..41.954 rows=1 loops=1)"
+"  Filter: (orderid = '408-7955685-3083534'::text)"
+"  Rows Removed by Filter: 128974"
+"Planning Time: 0.245 ms"
+"Execution Time: 41.976 ms"
 ```
 
 
-```
-"Seq Scan on amazon_sale_report  (cost=0.00..3548.75 rows=128975 width=45) (actual time=0.014..32.210 rows=128975 loops=1)"
-"Planning Time: 0.050 ms"
-"Execution Time: 41.589 ms"
 
 
-"Seq Scan on amazon_sale_report2  (cost=0.00..3548.75 rows=128975 width=45) (actual time=0.010..19.373 rows=128975 loops=1)"
-"Planning Time: 0.168 ms"
-"Execution Time: 23.924 ms"
-```
+#### 비교 사항 2: 모든 데이터를 출력하는 것과 필요 데이터만 출력하는 것에 대한 비교
+ - 쿼리 확인해보기
 
-
-
-
-- 비교 사항 2
-  - *와 필요 데이터만 출력하는 것에 대한 비교
 ```
 EXPLAIN ANALYZE SELECT OrderId, date,Status, CourierStatus FROM amazon_sale_report2;
 
 EXPLAIN ANALYZE SELECT * FROM amazon_sale_report2;
 ```
 
+  - 출력값
+```
+# 일부 데이터
+"Seq Scan on amazon_sale_report2  (cost=0.00..3548.75 rows=128975 width=45) (actual time=0.015..27.415 rows=128975 loops=1)"
+"Planning Time: 0.048 ms"
+"Execution Time: 38.064 ms"
+
+# 전체 데이터
+"Seq Scan on amazon_sale_report2  (cost=0.00..3548.75 rows=128975 width=105) (actual time=0.012..16.226 rows=128975 loops=1)"
+"Planning Time: 0.434 ms"
+"Execution Time: 21.044 ms"
+```
+  - 해당 출력값은 방금 사용한 테이블을 다시 사용해서 속도가 더 빠른 것으로 보인다 
 
 
-- 비교 사항 3
-  - 인덱스와 인덱스 없음의 비교
+
+
+#### 비교 사항 3: 인덱스와 인덱스 없음의 비교
+ - 테이블을 새로 만들고, 인덱스 생성
   
 ```
 CREATE TABLE amazon_sale_report3 AS SELECT * FROM amazon_sale_report2;
 
 CREATE INDEX ex_idx ON amazon_sale_report3(OrderId,Status);
 ```
+ - 인덱스가 있는 테이블과 없는 테이블 사이에서 속도 비교
 
+```
+EXPLAIN ANALYZE SELECT OrderId, date,Status, CourierStatus FROM amazon_sale_report3 WHERE orderID='408-7955685-3083534';
 
+EXPLAIN ANALYZE SELECT OrderId, date,Status, CourierStatus FROM amazon_sale_report2 WHERE orderID='408-7955685-3083534' ;
+```
+
+ - 출력값
+
+```
+# amazon_sale_report3의 경우
+"Index Scan using ex_idx on amazon_sale_report3  (cost=0.42..8.44 rows=1 width=45) (actual time=0.989..0.991 rows=1 loops=1)"
+"  Index Cond: (orderid = '408-7955685-3083534'::bpchar)"
+"Planning Time: 0.689 ms"
+"Execution Time: 1.055 ms"
+
+# amazon_sale_report2의 경우
+"Seq Scan on amazon_sale_report2  (cost=0.00..3871.19 rows=1 width=45) (actual time=0.033..35.460 rows=1 loops=1)"
+"  Filter: (orderid = '408-7955685-3083534'::bpchar)"
+"  Rows Removed by Filter: 128974"
+"Planning Time: 0.356 ms"
+"Execution Time: 35.506 ms"
+```
+
+ - 인덱스가 있는 테이블의 스캔이 더 빠른 것을 확인 가능하다.
  
 
 
