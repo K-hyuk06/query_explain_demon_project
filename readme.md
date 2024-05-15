@@ -390,7 +390,7 @@ WITH (FORMAT CSV, HEADER);
 - 모르는 부분은 text로 사용
 
 
-### 2) 테이터 탐색하기
+### 3) 테이터 탐색하기
 
 ```
 SELECT * FROM amazon_sale_report LIMIT 5;
@@ -408,7 +408,7 @@ SELECT COUNT(*), COUNT(DISTINCT ASIN) FROM amazon_sale_report;
 
 
 
-### 2) 쿼리 검색 확인
+### 4) 쿼리 검색 확인
 
 * 참조: 고객의 입장에서 주로 할 것 같은 검색은 배송 상태로, 주문, 일자 ,상태, 배송 상태를 추출하는 쿼리로 테스트 
 
